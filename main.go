@@ -1,13 +1,10 @@
-
 package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/bitrise-io/go-steputils/stepconf"
@@ -15,49 +12,24 @@ import (
 )
 
 type config struct {
-	PrivateToken  string `env:"private_token,required"`
-	RepositoryURL string `env:"repository_url,required"`
-	GitRef        string `env:"git_ref,required"`
-	APIURL        string `env:"api_base_url,required"`
-}
-
-func getRepo(u string) string {
-	r := regexp.MustCompile(`(?::\/\/[^/]+?\/|[^:/]+?:)([^/]+?\/.+?)(?:\.git)?\/?$`)
-	if matches := r.FindStringSubmatch(u); len(matches) == 2 {
-		return matches[1]
-	}
-	return ""
+	PrivateToken string `env:"private_token,required"`
+	ProjectID    string `env:"project_id,required"`   // GitLab project ID
+	GitRef       string `env:"git_ref,required"`      // Branch or tag to trigger
+	APIBaseURL   string `env:"api_base_url,required"` // GitLab API base URL
 }
 
 func triggerPipeline(cfg config) error {
-	repo := url.PathEscape(getRepo(cfg.RepositoryURL))
-	apiURL := fmt.Sprintf("%s/projects/%s/trigger/pipeline", cfg.APIURL, repo)
+	apiURL := fmt.Sprintf("%s/projects/%s/trigger/pipeline", cfg.APIBaseURL, url.PathEscape(cfg.ProjectID))
 
-	data := map[string]string{
-		"token": cfg.PrivateToken,
-		"ref":   cfg.GitRef,
-	}
-
-	if os.Getenv("BITRISE_API_TOKEN") != "" {
-		data["variables[BITRISE_API_TOKEN]"] = os.Getenv("BITRISE_API_TOKEN")
-	}
-	if os.Getenv("BITRISE_APP_SLUG") != "" {
-		data["variables[BITRISE_APP_SLUG]"] = os.Getenv("BITRISE_APP_SLUG")
-	}
-	if os.Getenv("BITRISE_BUILD_SLUG") != "" {
-		data["variables[BITRISE_BUILD_SLUG]"] = os.Getenv("BITRISE_BUILD_SLUG")
+	data := url.Values{
+		"token": {cfg.PrivateToken},
+		"ref":   {cfg.GitRef},
 	}
 
-	form := url.Values{}
-	for key, value := range data {
-		form.Set(key, value)
-	}
-
-	req, err := http.NewRequest("POST", apiURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %s", err)
 	}
-	req.Header.Add("PRIVATE-TOKEN", cfg.PrivateToken)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -67,24 +39,26 @@ func triggerPipeline(cfg config) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("server error: %s url: %s code: %d body: %s", resp.Status, apiURL, resp.StatusCode, string(body))
+		return fmt.Errorf("server error: %s (code: %d)", resp.Status, resp.StatusCode)
 	}
 
 	log.Infof("Pipeline triggered successfully.")
 	return nil
 }
 
-func main() {
+func mainE() error {
 	var cfg config
 	if err := stepconf.Parse(&cfg); err != nil {
-		log.Errorf("Error: %s\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error parsing configuration: %s", err)
 	}
 	stepconf.Print(cfg)
 
-	if err := triggerPipeline(cfg); err != nil {
-		log.Errorf("Failed to trigger pipeline, error: %s", err)
+	return triggerPipeline(cfg)
+}
+
+func main() {
+	if err := mainE(); err != nil {
+		fmt.Printf("Error: %+v\n", err)
 		os.Exit(1)
 	}
 }

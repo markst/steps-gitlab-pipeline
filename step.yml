@@ -1,38 +1,54 @@
 title: Trigger GitLab Pipeline
-summary: A Bitrise step to trigger a GitLab pipeline via the API.
-description: |
-  This step triggers a pipeline in a GitLab project using the provided API token, branch, and optional environment variables.
-github-url: https://github.com/your-org/trigger-gitlab-pipeline
-source_code_url: https://github.com/your-org/trigger-gitlab-pipeline
+summary: Trigger a pipeline in a GitLab project via the API.
+description: |-
+  This step triggers a pipeline in a GitLab project using the provided API token, project ID, branch, and optional environment variables.
+
+  ### Usage Instructions
+
+  - Provide a **GitLab API base URL**, typically `https://gitlab.com/api/v4` for cloud-hosted GitLab instances.
+  - Supply a **private token** with sufficient permissions to trigger pipelines.
+  - Use the **GitLab project ID** of the repository where the pipeline will be triggered.
+  - Specify the branch or tag to trigger the pipeline on with the **git_ref** input.
 
 inputs:
-  - private_token:
-      title: GitLab API Token
-      summary: The API token used to authenticate requests to GitLab.
-      description: |
-        This token should have sufficient permissions to trigger pipelines on the specified repository. 
-        Typically, this would be a personal access token or a project access token.
-      required: true
-  - repository_url:
-      title: GitLab Repository URL
-      summary: The URL of the GitLab repository.
-      description: |
-        The full URL to the GitLab repository where the pipeline will be triggered.
-        Example: `https://gitlab.com/your-org/your-repo`
-      required: true
-  - git_ref:
-      title: Branch or Tag
-      summary: The branch or tag to trigger the pipeline on.
-      description: |
-        Specify the branch or tag name where the pipeline will be triggered. 
+  - api_base_url: "https://gitlab.com/api/v4"
+    opts:
+      title: "GitLab API Base URL"
+      summary: "The base URL for GitLab's API."
+      description: |-
+        The API URL for GitLab or GitLab Enterprise.
+        Example: `https://gitlab.com/api/v4`.
+      is_required: true
+
+  - private_token: ""
+    opts:
+      title: "GitLab Private Token"
+      summary: "The token used to authenticate API requests."
+      description: |-
+        A GitLab API token with sufficient permissions to trigger pipelines.
+        Example steps to generate a token:
+        1. Log in to your GitLab instance.
+        2. Navigate to User Settings > Access Tokens.
+        3. Provide a name, set an appropriate scope, and generate the token.
+      is_required: true
+      is_sensitive: true
+
+  - project_id: ""
+    opts:
+      title: "GitLab Project ID"
+      summary: "The ID of the GitLab project where the pipeline will be triggered."
+      description: |-
+        Provide the numerical project ID from GitLab. You can find this in your project's settings or its URL.
+        Example: `123456`.
+      is_required: true
+
+  - git_ref: "$BITRISE_GIT_BRANCH"
+    opts:
+      title: "Branch or Tag"
+      summary: "The branch or tag to trigger the pipeline on."
+      description: |-
+        Specify the branch or tag name where the pipeline will be triggered.
         Example: `main`, `release/v1.0.0`.
-      required: true
-  - api_base_url:
-      title: GitLab API Base URL
-      summary: The base URL for GitLab's API.
-      description: |
-        The base URL for GitLab's API. Defaults to `https://gitlab.com/api/v4`.
-        Adjust this if you are using a self-hosted GitLab instance.
-      required: true
+      is_required: true
 
 outputs: []
