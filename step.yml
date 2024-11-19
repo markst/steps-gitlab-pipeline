@@ -1,0 +1,23 @@
+
+title: Trigger GitLab Pipeline
+summary: A Bitrise step to trigger a GitLab pipeline via the API.
+description: |
+  This step triggers a pipeline in a GitLab project using the provided API token, branch, and optional environment variables.
+github-url: https://github.com/your-org/trigger-gitlab-pipeline
+source_code_url: https://github.com/your-org/trigger-gitlab-pipeline
+
+inputs:
+  - private_token:
+      summary: The GitLab trigger token used for authentication.
+      required: true
+  - repository_url:
+      summary: The GitLab repository URL.
+      required: true
+  - git_ref:
+      summary: The branch or tag to trigger the pipeline on.
+      required: true
+  - api_base_url:
+      summary: The base URL for the GitLab API (e.g., https://gitlab.com/api/v4).
+      required: true
+
+outputs: []
