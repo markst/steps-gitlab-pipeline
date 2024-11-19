@@ -10,6 +10,9 @@ description: |-
   - Use the **GitLab project ID** of the repository where the pipeline will be triggered.
   - Specify the branch or tag to trigger the pipeline on with the **git_ref** input.
 
+toolkit:
+  go:
+    package_name: github.com/markst/steps-gitlab-pipeline
 inputs:
   - api_base_url: "https://gitlab.com/api/v4"
     opts:
