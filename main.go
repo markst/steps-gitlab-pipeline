@@ -209,6 +209,11 @@ func findPipelineID(response GraphQLResponse) string {
 func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToken string) {
 	url := fmt.Sprintf(statusUpdateURL, projectPath, commitSHA)
 
+	// Log the URL and commitSHA
+	fmt.Printf("Publishing build status to URL: %s\n", url)
+	fmt.Printf("Using commit SHA: %s\n", commitSHA)
+
+	// Build the request body
 	requestBody := map[string]string{
 		"state":       status,                         // Can be "success", "failed", "pending", etc.
 		"target_url":  os.Getenv("bitrise_build_url"), // Optional: Link to the Bitrise build
@@ -220,6 +225,7 @@ func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToke
 		log.Fatalf("Failed to marshal status update body: %v", err)
 	}
 
+	// Create the HTTP request
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		log.Fatalf("Failed to create status update request: %v", err)
@@ -227,6 +233,7 @@ func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToke
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+gitlabToken)
 
+	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -234,6 +241,7 @@ func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToke
 	}
 	defer resp.Body.Close()
 
+	// Check the response
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := ioutil.ReadAll(resp.Body)
 		log.Fatalf("Failed to update status with status %d: %s", resp.StatusCode, string(body))
