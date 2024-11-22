@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 )
 
 const (
@@ -21,23 +20,28 @@ const (
 type GraphQLResponse struct {
 	Data struct {
 		Project struct {
-			Name         string `json:"name"`
-			MergeRequest struct {
-				Title     string `json:"title"`
-				Pipelines struct {
-					Nodes []struct {
-						IID  string `json:"iid"`
-						Jobs struct {
-							Nodes []struct {
-								ID         string `json:"id"`
-								Name       string `json:"name"`
-								Status     string `json:"status"`
-								CanPlayJob bool   `json:"canPlayJob"`
-							} `json:"nodes"`
-						} `json:"jobs"`
-					} `json:"nodes"`
-				} `json:"pipelines"`
-			} `json:"mergeRequest"`
+			Name          string `json:"name"`
+			MergeRequests struct {
+				Nodes []struct {
+					IID       string `json:"iid"`
+					ID        string `json:"id"`
+					Title     string `json:"title"`
+					Pipelines struct {
+						Nodes []struct {
+							ID   string `json:"id"`
+							IID  string `json:"iid"`
+							Jobs struct {
+								Nodes []struct {
+									ID         string `json:"id"`
+									Name       string `json:"name"`
+									Status     string `json:"status"`
+									CanPlayJob bool   `json:"canPlayJob"`
+								} `json:"nodes"`
+							} `json:"jobs"`
+						} `json:"nodes"`
+					} `json:"pipelines"`
+				} `json:"nodes"`
+			} `json:"mergeRequests"`
 		} `json:"project"`
 	} `json:"data"`
 }
@@ -57,7 +61,7 @@ type GraphQLMutationResponse struct {
 
 func main() {
 	// Fetch environment variables
-	projectPath, mergeRequestIID, jobName, gitlabToken, buildStatus, buildSHA, buildURL := fetchEnvVars()
+	projectPath, branchName, jobName, gitlabToken, buildStatus, buildSHA, buildURL := fetchEnvVars()
 
 	// Debug: Log all environment variables
 	fmt.Println("All Environment Variables:")
@@ -69,19 +73,19 @@ func main() {
 	status := buildStatusToState(buildStatus)
 
 	// Fetch pipelines for the merge request
-	response := fetchPipelines(projectPath, mergeRequestIID, gitlabToken)
+	response := fetchPipelines(projectPath, branchName, gitlabToken)
 
 	// Debug log: Output all jobs
 	debugLogJobs(response)
 
 	// Find the job and its associated pipeline ID
-	jobID, pipelineID := findJobID(response, jobName)
+	jobID, pipelineID := findJobAndPipeline(response, jobName)
 	if jobID == "" || pipelineID == "" {
-		log.Fatalf("No playable job or pipeline found for job '%s' in merge request '%s'.", jobName, mergeRequestIID)
+		log.Fatalf("No playable job or pipeline found for job '%s' in branch '%s'.", jobName, branchName)
 	}
 
 	// Publish Bitrise build status to GitLab
-	publishBitriseStatus(projectPath, pipelineID, buildSHA, status, gitlabToken, buildURL)
+	publishBuildStatus(projectPath, pipelineID, buildSHA, status, gitlabToken, buildURL)
 
 	// Trigger the job if build status is "success"
 	if status == "success" {
@@ -95,23 +99,18 @@ func main() {
 // fetchEnvVars retrieves and validates the required environment variables.
 func fetchEnvVars() (string, string, string, string, string, string, string) {
 	projectPath := os.Getenv("gitlab_project_path")
-	mergeRequestIID := os.Getenv("gitlab_merge_request_iid")
+	branchName := os.Getenv("gitlab_branch_name")
 	jobName := os.Getenv("gitlab_job_name")
 	gitlabToken := os.Getenv("gitlab_token")
 	buildStatus := os.Getenv("bitrise_build_status")
 	buildSHA := os.Getenv("bitrise_git_commit")
 	buildURL := os.Getenv("bitrise_build_url")
 
-	if projectPath == "" || mergeRequestIID == "" || jobName == "" || gitlabToken == "" || buildSHA == "" || buildURL == "" {
+	if projectPath == "" || branchName == "" || jobName == "" || gitlabToken == "" || buildSHA == "" || buildURL == "" {
 		log.Fatalf("One or more required environment variables are missing.")
 	}
 
-	// Parse buildStatus as integer if possible
-	if _, err := strconv.Atoi(buildStatus); err != nil {
-		log.Fatalf("Invalid bitrise_build_status: %s. Must be a valid integer as a string (e.g., '0' or '1').", buildStatus)
-	}
-
-	return projectPath, mergeRequestIID, jobName, gitlabToken, buildStatus, buildSHA, buildURL
+	return projectPath, branchName, jobName, gitlabToken, buildStatus, buildSHA, buildURL
 }
 
 // buildStatusToState maps the Bitrise build status (as a string) to GitLab states.
@@ -127,22 +126,27 @@ func buildStatusToState(buildStatus string) string {
 }
 
 // fetchPipelines sends the GraphQL query to GitLab and returns the parsed response.
-func fetchPipelines(projectPath, mergeRequestIID, gitlabToken string) GraphQLResponse {
+func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse {
 	query := `
-	query GetPipelineJobs {
-		project(fullPath: "` + projectPath + `") {
+	query GetPipelineJobs($projectPath: ID!, $branchName: String!) {
+		project(fullPath: $projectPath) {
 			name
-			mergeRequest(iid: "` + mergeRequestIID + `") {
-				title
-				pipelines {
-					nodes {
-						iid
-						jobs {
-							nodes {
-								id
-								name
-								status
-								canPlayJob
+			mergeRequests(sourceBranch: $branchName, first: 1) {
+				nodes {
+					iid
+					id
+					title
+					pipelines {
+						nodes {
+							id
+							iid
+							jobs {
+								nodes {
+									id
+									name
+									status
+									canPlayJob
+								}
 							}
 						}
 					}
@@ -151,7 +155,15 @@ func fetchPipelines(projectPath, mergeRequestIID, gitlabToken string) GraphQLRes
 		}
 	}`
 
-	requestBody := map[string]string{"query": query}
+	variables := map[string]string{
+		"projectPath": projectPath,
+		"branchName":  branchName,
+	}
+	requestBody := map[string]interface{}{
+		"query":     query,
+		"variables": variables,
+	}
+
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
 		log.Fatalf("Failed to marshal GraphQL query: %v", err)
@@ -191,28 +203,32 @@ func fetchPipelines(projectPath, mergeRequestIID, gitlabToken string) GraphQLRes
 // debugLogJobs logs all job nodes in the pipelines for debugging.
 func debugLogJobs(response GraphQLResponse) {
 	fmt.Println("Debug: Listing all job nodes in pipelines:")
-	for _, pipeline := range response.Data.Project.MergeRequest.Pipelines.Nodes {
-		for _, job := range pipeline.Jobs.Nodes {
-			fmt.Printf("  Job ID: %s, Name: %s, Status: %s, CanPlayJob: %v\n",
-				job.ID, job.Name, job.Status, job.CanPlayJob)
+	for _, mergeRequest := range response.Data.Project.MergeRequests.Nodes {
+		for _, pipeline := range mergeRequest.Pipelines.Nodes {
+			for _, job := range pipeline.Jobs.Nodes {
+				fmt.Printf("  Job ID: %s, Name: %s, Status: %s, CanPlayJob: %v\n",
+					job.ID, job.Name, job.Status, job.CanPlayJob)
+			}
 		}
 	}
 }
 
-// findJobID searches for a playable job with the specified name and returns its ID and associated pipeline ID.
-func findJobID(response GraphQLResponse, jobName string) (string, string) {
-	for _, pipeline := range response.Data.Project.MergeRequest.Pipelines.Nodes {
-		for _, job := range pipeline.Jobs.Nodes {
-			if job.Name == jobName && job.CanPlayJob {
-				return job.ID, pipeline.IID
+// findJobAndPipeline searches for a playable job with the specified name and returns its ID and associated pipeline ID.
+func findJobAndPipeline(response GraphQLResponse, jobName string) (string, string) {
+	for _, mergeRequest := range response.Data.Project.MergeRequests.Nodes {
+		for _, pipeline := range mergeRequest.Pipelines.Nodes {
+			for _, job := range pipeline.Jobs.Nodes {
+				if job.Name == jobName && job.CanPlayJob {
+					return job.ID, pipeline.ID
+				}
 			}
 		}
 	}
 	return "", ""
 }
 
-// publishBitriseStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
-func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToken, buildURL string) {
+// publishBuildStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
+func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken, buildURL string) {
 	encodedProjectPath := url.PathEscape(projectPath)
 	statusUpdateEndpoint := fmt.Sprintf(statusUpdateURL, encodedProjectPath, commitSHA)
 
