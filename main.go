@@ -269,10 +269,26 @@ func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken,
 
 // triggerJob sends a GraphQL mutation to GitLab to play the specified job.
 func triggerJob(jobID, gitlabToken string) {
-	fmt.Printf("Triggering job with id '%s'.\n", jobID)
+	// Retrieve Bitrise variables from the environment
+	bitriseAPIToken := os.Getenv("BITRISE_API_TOKEN")
+	bitriseAppSlug := os.Getenv("BITRISE_APP_SLUG")
+	bitriseBuildSlug := os.Getenv("BITRISE_BUILD_SLUG")
+
+	if bitriseAPIToken == "" || bitriseAppSlug == "" || bitriseBuildSlug == "" {
+		log.Fatalf("BITRISE_API_TOKEN, BITRISE_APP_SLUG, and BITRISE_BUILD_SLUG must be set.")
+	}
+
+	// Build the variables array
+	variables := []map[string]string{
+		{"key": "BITRISE_API_TOKEN", "value": bitriseAPIToken},
+		{"key": "BITRISE_APP_SLUG", "value": bitriseAppSlug},
+		{"key": "BITRISE_BUILD_SLUG", "value": bitriseBuildSlug},
+	}
+
+	// Build the GraphQL mutation
 	mutation := `
-	mutation {
-		jobPlay(input: { clientMutationId: "bitrise-trigger", id: "` + jobID + `" }) {
+	mutation TriggerJob($input: JobPlayInput!) {
+		jobPlay(input: $input) {
 			job {
 				id
 				status
@@ -281,12 +297,24 @@ func triggerJob(jobID, gitlabToken string) {
 		}
 	}`
 
-	requestBody := map[string]string{"query": mutation}
+	// Prepare input with variables
+	input := map[string]interface{}{
+		"clientMutationId": "bitrise-trigger",
+		"id":               jobID,
+		"variables":        variables,
+	}
+
+	// Serialize the mutation and input
+	requestBody := map[string]interface{}{
+		"query":     mutation,
+		"variables": map[string]interface{}{"input": input},
+	}
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
 		log.Fatalf("Failed to marshal GraphQL mutation: %v", err)
 	}
 
+	// Create the HTTP request
 	req, err := http.NewRequest("POST", graphqlURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		log.Fatalf("Failed to create HTTP request for mutation: %v", err)
@@ -294,6 +322,7 @@ func triggerJob(jobID, gitlabToken string) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+gitlabToken)
 
+	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -301,13 +330,18 @@ func triggerJob(jobID, gitlabToken string) {
 	}
 	defer resp.Body.Close()
 
+	// Check the response
 	if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
 		log.Fatalf("GraphQL mutation failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	// Parse the response
 	var mutationResponse GraphQLMutationResponse
 	body, err := ioutil.ReadAll(resp.Body)
+	responseBody := string(body)
+	fmt.Printf("Triggered job response", responseBody)
+
 	if err != nil {
 		log.Fatalf("Failed to read mutation response body: %v", err)
 	}
@@ -315,6 +349,7 @@ func triggerJob(jobID, gitlabToken string) {
 		log.Fatalf("Failed to parse mutation response: %v", err)
 	}
 
+	// Check for errors in the response
 	if len(mutationResponse.Data.JobPlay.Errors) > 0 {
 		log.Fatalf("Failed to play job. Errors: %v", mutationResponse.Data.JobPlay.Errors)
 	}
