@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 )
 
 const (
@@ -28,14 +29,14 @@ type GraphQLResponse struct {
 					Title     string `json:"title"`
 					Pipelines struct {
 						Nodes []struct {
-							ID   string `json:"id"`
-							IID  string `json:"iid"`
+							ID   string `json:"id"`  // Global pipeline ID
+							IID  string `json:"iid"` // Short pipeline ID
 							Jobs struct {
 								Nodes []struct {
-									ID         string `json:"id"`
-									Name       string `json:"name"`
-									Status     string `json:"status"`
-									CanPlayJob bool   `json:"canPlayJob"`
+									ID         string `json:"id"`         // Job global ID
+									Name       string `json:"name"`       // Job name
+									Status     string `json:"status"`     // Job status
+									CanPlayJob bool   `json:"canPlayJob"` // Can this job be played
 								} `json:"nodes"`
 							} `json:"jobs"`
 						} `json:"nodes"`
@@ -74,9 +75,6 @@ func main() {
 
 	// Fetch pipelines for the merge request
 	response := fetchPipelines(projectPath, branchName, gitlabToken)
-
-	// Debug log: Output all jobs
-	debugLogJobs(response)
 
 	// Find the job and its associated pipeline ID
 	jobID, pipelineID := findJobAndPipeline(response, jobName)
@@ -128,10 +126,10 @@ func buildStatusToState(buildStatus string) string {
 // fetchPipelines sends the GraphQL query to GitLab and returns the parsed response.
 func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse {
 	query := `
-	query GetPipelineJobs($projectPath: ID!, $branchName: String!) {
+	query GetPipelineJobs($projectPath: ID!, $branchName: [String!]) {
 		project(fullPath: $projectPath) {
 			name
-			mergeRequests(sourceBranch: $branchName, first: 1) {
+			mergeRequests(sourceBranches: $branchName, first: 1) {
 				nodes {
 					iid
 					id
@@ -155,9 +153,10 @@ func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse
 		}
 	}`
 
-	variables := map[string]string{
+	// Prepare variables
+	variables := map[string]interface{}{
 		"projectPath": projectPath,
-		"branchName":  branchName,
+		"branchName":  []string{branchName}, // Pass branch name as an array
 	}
 	requestBody := map[string]interface{}{
 		"query":     query,
@@ -190,6 +189,9 @@ func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse
 
 	var gqlResponse GraphQLResponse
 	body, err := ioutil.ReadAll(resp.Body)
+	responseBody := string(body)
+	fmt.Printf("Fetch pipelines", responseBody)
+
 	if err != nil {
 		log.Fatalf("Failed to read response body: %v", err)
 	}
@@ -200,31 +202,26 @@ func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse
 	return gqlResponse
 }
 
-// debugLogJobs logs all job nodes in the pipelines for debugging.
-func debugLogJobs(response GraphQLResponse) {
-	fmt.Println("Debug: Listing all job nodes in pipelines:")
-	for _, mergeRequest := range response.Data.Project.MergeRequests.Nodes {
-		for _, pipeline := range mergeRequest.Pipelines.Nodes {
-			for _, job := range pipeline.Jobs.Nodes {
-				fmt.Printf("  Job ID: %s, Name: %s, Status: %s, CanPlayJob: %v\n",
-					job.ID, job.Name, job.Status, job.CanPlayJob)
-			}
-		}
-	}
-}
-
 // findJobAndPipeline searches for a playable job with the specified name and returns its ID and associated pipeline ID.
 func findJobAndPipeline(response GraphQLResponse, jobName string) (string, string) {
 	for _, mergeRequest := range response.Data.Project.MergeRequests.Nodes {
 		for _, pipeline := range mergeRequest.Pipelines.Nodes {
 			for _, job := range pipeline.Jobs.Nodes {
 				if job.Name == jobName && job.CanPlayJob {
-					return job.ID, pipeline.ID
+					// Extract the numeric pipeline ID from the full ID
+					pipelineID := extractLastComponent(pipeline.ID)
+					return job.ID, pipelineID
 				}
 			}
 		}
 	}
 	return "", ""
+}
+
+// extractLastComponent extracts the last component of a string separated by '/'
+func extractLastComponent(fullID string) string {
+	parts := strings.Split(fullID, "/")
+	return parts[len(parts)-1]
 }
 
 // publishBuildStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
@@ -262,7 +259,6 @@ func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken,
 
 	body, _ := ioutil.ReadAll(resp.Body)
 	fmt.Printf("Response status: %d\n", resp.StatusCode)
-	fmt.Printf("Response body: %s\n", string(body))
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		log.Fatalf("Failed to update status with status %d: %s", resp.StatusCode, string(body))
@@ -273,6 +269,7 @@ func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken,
 
 // triggerJob sends a GraphQL mutation to GitLab to play the specified job.
 func triggerJob(jobID, gitlabToken string) {
+	fmt.Printf("Triggering job with id '%s'.\n", jobID)
 	mutation := `
 	mutation {
 		jobPlay(input: { clientMutationId: "bitrise-trigger", id: "` + jobID + `" }) {
