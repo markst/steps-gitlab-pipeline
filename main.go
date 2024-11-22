@@ -88,7 +88,7 @@ func main() {
 	// Trigger the job if build status is "success"
 	if status == "success" {
 		fmt.Println("Build status indicates success. Proceeding to trigger the job.")
-		triggerJob(jobID, gitlabToken)
+		triggerJob(projectPath, jobID, gitlabToken)
 	} else {
 		fmt.Printf("Build status is '%s'. Skipping job trigger.\n", status)
 	}
@@ -268,56 +268,38 @@ func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken,
 }
 
 // triggerJob sends a GraphQL mutation to GitLab to play the specified job.
-func triggerJob(jobID, gitlabToken string) {
-	// Retrieve Bitrise variables from the environment
-	bitriseAPIToken := os.Getenv("BITRISE_API_TOKEN")
-	bitriseAppSlug := os.Getenv("BITRISE_APP_SLUG")
-	bitriseBuildSlug := os.Getenv("BITRISE_BUILD_SLUG")
+func triggerJob(projectID, jobID, gitlabToken string) {
+	// Build the API URL for triggering the job
+	apiURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s/jobs/%s/play", url.PathEscape(projectID), extractLastComponent(jobID))
+	fmt.Printf("Triggering job with id '%s' - url '%s'.\n", jobID, apiURL)
 
-	if bitriseAPIToken == "" || bitriseAppSlug == "" || bitriseBuildSlug == "" {
-		log.Fatalf("BITRISE_API_TOKEN, BITRISE_APP_SLUG, and BITRISE_BUILD_SLUG must be set.")
+	// Prepare the variables
+	variables := map[string]string{
+		"BITRISE_API_TOKEN":  os.Getenv("BITRISE_API_TOKEN"),
+		"BITRISE_APP_SLUG":   os.Getenv("BITRISE_APP_SLUG"),
+		"BITRISE_BUILD_SLUG": os.Getenv("BITRISE_BUILD_SLUG"),
 	}
 
-	// Build the variables array
-	variables := []map[string]string{
-		{"key": "BITRISE_API_TOKEN", "value": bitriseAPIToken},
-		{"key": "BITRISE_APP_SLUG", "value": bitriseAppSlug},
-		{"key": "BITRISE_BUILD_SLUG", "value": bitriseBuildSlug},
-	}
-
-	// Build the GraphQL mutation
-	mutation := `
-	mutation TriggerJob($input: JobPlayInput!) {
-		jobPlay(input: $input) {
-			job {
-				id
-				status
-			}
-			errors
+	// Ensure all required variables are set
+	for key, value := range variables {
+		if value == "" {
+			log.Fatalf("Environment variable %s must be set.", key)
 		}
-	}`
-
-	// Prepare input with variables
-	input := map[string]interface{}{
-		"clientMutationId": "bitrise-trigger",
-		"id":               jobID,
-		"variables":        variables,
 	}
 
-	// Serialize the mutation and input
+	// Prepare the request body
 	requestBody := map[string]interface{}{
-		"query":     mutation,
-		"variables": map[string]interface{}{"input": input},
+		"variables": variables,
 	}
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
-		log.Fatalf("Failed to marshal GraphQL mutation: %v", err)
+		log.Fatalf("Failed to marshal request body: %v", err)
 	}
 
 	// Create the HTTP request
-	req, err := http.NewRequest("POST", graphqlURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		log.Fatalf("Failed to create HTTP request for mutation: %v", err)
+		log.Fatalf("Failed to create HTTP request for job trigger: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+gitlabToken)
@@ -326,33 +308,27 @@ func triggerJob(jobID, gitlabToken string) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Request failed: %v", err)
+		log.Fatalf("Failed to send the job trigger request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Check the response
-	if resp.StatusCode != http.StatusOK {
+	// Check the response status code
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := ioutil.ReadAll(resp.Body)
-		log.Fatalf("GraphQL mutation failed with status %d: %s", resp.StatusCode, string(body))
+		log.Fatalf("Failed to trigger job. Status: %d, Response: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse the response
-	var mutationResponse GraphQLMutationResponse
 	body, err := ioutil.ReadAll(resp.Body)
 	responseBody := string(body)
 	fmt.Printf("Triggered job response", responseBody)
 
 	if err != nil {
-		log.Fatalf("Failed to read mutation response body: %v", err)
-	}
-	if err := json.Unmarshal(body, &mutationResponse); err != nil {
-		log.Fatalf("Failed to parse mutation response: %v", err)
+		log.Fatalf("Failed to read response body: %v", err)
 	}
 
-	// Check for errors in the response
-	if len(mutationResponse.Data.JobPlay.Errors) > 0 {
-		log.Fatalf("Failed to play job. Errors: %v", mutationResponse.Data.JobPlay.Errors)
-	}
+	// Debug output for the response
+	fmt.Printf("Job trigger response: %s\n", string(body))
 
-	fmt.Printf("Job '%s' successfully triggered with status '%s'.\n", mutationResponse.Data.JobPlay.Job.ID, mutationResponse.Data.JobPlay.Job.Status)
+	fmt.Println("Job successfully triggered.")
 }
