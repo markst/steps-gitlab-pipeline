@@ -1,4 +1,4 @@
-format_version: "0.0.6"
+format_version: "0.0.7"
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 step:
@@ -12,37 +12,52 @@ step:
 
   inputs:
     - BITRISE_PROJECT_PATH:
+        title: "GitLab Project Path"
+        summary: "The full path of the GitLab project (e.g., 'group/project')."
         opts:
           is_required: true
-          description: "The full path of the GitLab project (e.g., 'group/project')."
+          description: "Specify the full path of the GitLab project."
     - BITRISE_MERGE_REQUEST_IID:
+        title: "Merge Request IID"
+        summary: "The IID of the GitLab merge request."
         opts:
           is_required: true
-          description: "The IID of the GitLab merge request."
+          description: "Specify the IID of the merge request."
     - BITRISE_JOB_NAME:
+        title: "GitLab Job Name"
+        summary: "The name of the GitLab job to trigger (e.g., 'test-job')."
         opts:
           is_required: true
-          description: "The name of the GitLab job to trigger (e.g., 'test-job')."
+          description: "Specify the name of the job to trigger within the pipeline."
     - BITRISE_BUILD_STATUS:
+        title: "Bitrise Build Status"
+        summary: "The status of the Bitrise build to publish to GitLab."
         opts:
           is_required: true
           description: |
-            The Bitrise build status to publish to GitLab:
-              - 0: Success
+            Specify the Bitrise build status:
+              - 0: Successful
               - 1: Failed
     - BITRISE_GIT_COMMIT:
+        title: "Git Commit SHA"
+        summary: "The Git commit SHA to associate with the status update."
         opts:
           is_required: true
-          description: "The Git commit SHA to associate with the status update."
+          description: "Specify the SHA of the commit to associate with the status update."
     - BITRISE_BUILD_URL:
+        title: "Bitrise Build URL"
+        summary: "Optional URL for the Bitrise build."
         opts:
           is_required: false
-          description: "The Bitrise build URL to include in the status update."
+          description: "Provide the URL of the Bitrise build for reference in GitLab."
     - GITLAB_TOKEN:
+        title: "GitLab Personal Access Token"
+        summary: "Personal access token to authenticate with GitLab."
         opts:
           is_required: true
-          description: "A personal access token for authenticating with GitLab."
-  
+          description: |
+            Specify a GitLab personal access token with API scope for authenticating requests.
+
   outputs: []
 
   steps:
