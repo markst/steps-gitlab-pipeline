@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 )
 
@@ -207,7 +208,9 @@ func findPipelineID(response GraphQLResponse) string {
 
 // publishBitriseStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
 func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToken string) {
-	url := fmt.Sprintf(statusUpdateURL, projectPath, commitSHA)
+	// URL encode the projectPath
+	encodedProjectPath := url.PathEscape(projectPath)
+	url := fmt.Sprintf(statusUpdateURL, encodedProjectPath, commitSHA)
 
 	// Log the URL and commitSHA
 	fmt.Printf("Publishing build status to URL: %s\n", url)
