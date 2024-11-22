@@ -1,57 +1,54 @@
-title: Trigger GitLab Pipeline
-summary: Trigger a pipeline in a GitLab project via the API.
-description: |-
-  This step triggers a pipeline in a GitLab project using the provided API token, project ID, branch, and optional environment variables.
+format_version: "0.0.6"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
-  ### Usage Instructions
+step:
+  title: "Trigger GitLab Job and Update Build Status"
+  summary: "Fetch pipelines and jobs from GitLab, publish Bitrise build status, and optionally trigger a job."
+  description: |
+    This step:
+      - Fetches pipelines and jobs for a merge request from GitLab.
+      - Publishes the Bitrise build status to GitLab.
+      - Triggers a specified GitLab job if the build status is successful.
 
-  - Provide a **GitLab API base URL**, typically `https://gitlab.com/api/v4` for cloud-hosted GitLab instances.
-  - Supply a **private token** with sufficient permissions to trigger pipelines.
-  - Use the **GitLab project ID** of the repository where the pipeline will be triggered.
-  - Specify the branch or tag to trigger the pipeline on with the **git_ref** input.
+  inputs:
+    - BITRISE_PROJECT_PATH:
+        opts:
+          is_required: true
+          description: "The full path of the GitLab project (e.g., 'group/project')."
+    - BITRISE_MERGE_REQUEST_IID:
+        opts:
+          is_required: true
+          description: "The IID of the GitLab merge request."
+    - BITRISE_JOB_NAME:
+        opts:
+          is_required: true
+          description: "The name of the GitLab job to trigger (e.g., 'test-job')."
+    - BITRISE_BUILD_STATUS:
+        opts:
+          is_required: true
+          description: |
+            The Bitrise build status to publish to GitLab:
+              - 0: Success
+              - 1: Failed
+    - BITRISE_GIT_COMMIT:
+        opts:
+          is_required: true
+          description: "The Git commit SHA to associate with the status update."
+    - BITRISE_BUILD_URL:
+        opts:
+          is_required: false
+          description: "The Bitrise build URL to include in the status update."
+    - GITLAB_TOKEN:
+        opts:
+          is_required: true
+          description: "A personal access token for authenticating with GitLab."
+  
+  outputs: []
 
-toolkit:
-  go:
-    package_name: github.com/markst/steps-gitlab-pipeline
-inputs:
-  - api_base_url: "https://gitlab.com/api/v4"
-    opts:
-      title: "GitLab API Base URL"
-      summary: "The base URL for GitLab's API."
-      description: |-
-        The API URL for GitLab or GitLab Enterprise.
-        Example: `https://gitlab.com/api/v4`.
-      is_required: true
-
-  - private_token: ""
-    opts:
-      title: "GitLab Private Token"
-      summary: "The token used to authenticate API requests."
-      description: |-
-        A GitLab API token with sufficient permissions to trigger pipelines.
-        Example steps to generate a token:
-        1. Log in to your GitLab instance.
-        2. Navigate to User Settings > Access Tokens.
-        3. Provide a name, set an appropriate scope, and generate the token.
-      is_required: true
-      is_sensitive: true
-
-  - project_id: ""
-    opts:
-      title: "GitLab Project ID"
-      summary: "The ID of the GitLab project where the pipeline will be triggered."
-      description: |-
-        Provide the numerical project ID from GitLab. You can find this in your project's settings or its URL.
-        Example: `123456`.
-      is_required: true
-
-  - git_ref: "$BITRISE_GIT_BRANCH"
-    opts:
-      title: "Branch or Tag"
-      summary: "The branch or tag to trigger the pipeline on."
-      description: |-
-        Specify the branch or tag name where the pipeline will be triggered.
-        Example: `main`, `release/v1.0.0`.
-      is_required: true
-
-outputs: []
+  steps:
+    - script:
+        title: "Trigger GitLab Job and Update Build Status"
+        script:
+          content: |
+            #!/bin/bash
+            go run ./trigger_gitlab_job.go
