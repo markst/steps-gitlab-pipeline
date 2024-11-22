@@ -34,6 +34,12 @@ inputs:
       summary: "The IID of the GitLab merge request."
       description: "Specify the IID of the merge request."
       is_required: true
+  - gitlab_branch_name: ""
+    opts:
+      title: "Branch name"
+      summary: "The branch name for the associated build"
+      description: "Specify the branch name or variable."
+      is_required: true
   - gitlab_job_name: ""
     opts:
       title: "GitLab Job Name"
