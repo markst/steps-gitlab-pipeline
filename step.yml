@@ -1,61 +1,72 @@
-format_version: "14"
+format_version: "1.0.0"
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 title: "Trigger GitLab Job and Update Build Status"
 summary: "Fetch pipelines and jobs from GitLab, publish Bitrise build status, and optionally trigger a job."
-description: |
-  This step:
+description: |-
+  This Step:
     - Fetches pipelines and jobs for a merge request from GitLab.
     - Publishes the Bitrise build status to GitLab.
     - Triggers a specified GitLab job if the build status is successful.
 
+website: https://github.com/your-repo/trigger-gitlab-job
+source_code_url: https://github.com/your-repo/trigger-gitlab-job
+support_url: https://github.com/your-repo/trigger-gitlab-job/issues
+type_tags:
+  - utility
+is_requires_admin_user: false
+is_always_run: false
+is_skippable: true
+toolkit:
+  go:
+    package_name: github.com/your-repo/trigger-gitlab-job
+
 inputs:
-  - BITRISE_PROJECT_PATH:
+  - gitlab_project_path: ""
+    opts:
       title: "GitLab Project Path"
       summary: "The full path of the GitLab project (e.g., 'group/project')."
-      opts:
-        is_required: true
-        description: "Specify the full path of the GitLab project."
-  - BITRISE_MERGE_REQUEST_IID:
+      description: "Specify the full path of the GitLab project."
+      is_required: true
+  - gitlab_merge_request_iid: ""
+    opts:
       title: "Merge Request IID"
       summary: "The IID of the GitLab merge request."
-      opts:
-        is_required: true
-        description: "Specify the IID of the merge request."
-  - GITLAB_JOB_NAME:
+      description: "Specify the IID of the merge request."
+      is_required: true
+  - gitlab_job_name: ""
+    opts:
       title: "GitLab Job Name"
       summary: "The name of the GitLab job to trigger (e.g., 'test-job')."
-      opts:
-        is_required: true
-        description: "Specify the name of the job to trigger within the pipeline."
-  - BITRISE_BUILD_STATUS:
+      description: "Specify the name of the job to trigger within the pipeline."
+      is_required: true
+  - bitrise_build_status: ""
+    opts:
       title: "Bitrise Build Status"
       summary: "The status of the Bitrise build to publish to GitLab."
-      opts:
-        is_required: true
-        description: |
-          Specify the Bitrise build status:
-            - 0: Successful
-            - 1: Failed
-  - BITRISE_GIT_COMMIT:
+      description: |-
+        Specify the Bitrise build status:
+        - 0: Successful
+        - 1: Failed
+      is_required: true
+  - bitrise_git_commit: "$BITRISE_GIT_COMMIT"
+    opts:
       title: "Git Commit SHA"
       summary: "The Git commit SHA to associate with the status update."
-      opts:
-        is_required: true
-        description: "Specify the SHA of the commit to associate with the status update."
-  - BITRISE_BUILD_URL:
+      description: "Specify the SHA of the commit to associate with the status update."
+      is_required: true
+  - bitrise_build_url: "$BITRISE_BUILD_URL"
+    opts:
       title: "Bitrise Build URL"
       summary: "Optional URL for the Bitrise build."
-      opts:
-        is_required: false
-        description: "Provide the URL of the Bitrise build for reference in GitLab."
-  - GITLAB_TOKEN:
+      description: "Provide the URL of the Bitrise build for reference in GitLab."
+  - gitlab_token: ""
+    opts:
       title: "GitLab Personal Access Token"
       summary: "Personal access token to authenticate with GitLab."
-      opts:
-        is_required: true
-        description: |
-          Specify a GitLab personal access token with API scope for authenticating requests.
+      description: |-
+        Specify a GitLab personal access token with API scope for authenticating requests.
+      is_required: true
 
 outputs: []
 
