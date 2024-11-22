@@ -74,21 +74,18 @@ func main() {
 	// Debug log: Output all jobs
 	debugLogJobs(response)
 
-	// Publish Bitrise build status to GitLab
-	pipelineID := findPipelineID(response)
-	if buildSHA == "" || pipelineID == "" {
-		log.Fatal("bitrise_git_commit and pipeline_id must be set.")
+	// Find the job and its associated pipeline ID
+	jobID, pipelineID := findJobID(response, jobName)
+	if jobID == "" || pipelineID == "" {
+		log.Fatalf("No playable job or pipeline found for job '%s' in merge request '%s'.", jobName, mergeRequestIID)
 	}
+
+	// Publish Bitrise build status to GitLab
 	publishBitriseStatus(projectPath, pipelineID, buildSHA, status, gitlabToken, buildURL)
 
 	// Trigger the job if build status is "success"
 	if status == "success" {
-		fmt.Println("Build status indicates success. Proceeding to fetch job ID and trigger the job.")
-		jobID := findJobID(response, jobName)
-		if jobID == "" {
-			log.Fatalf("No playable job found with name '%s' in pipelines for merge request IID '%s'.", jobName, mergeRequestIID)
-		}
-		fmt.Printf("Found job ID: %s\n", jobID)
+		fmt.Println("Build status indicates success. Proceeding to trigger the job.")
 		triggerJob(jobID, gitlabToken)
 	} else {
 		fmt.Printf("Build status is '%s'. Skipping job trigger.\n", status)
@@ -96,7 +93,7 @@ func main() {
 }
 
 // fetchEnvVars retrieves and validates the required environment variables.
-func fetchEnvVars() (string, string, string, string, interface{}, string, string) {
+func fetchEnvVars() (string, string, string, string, string, string, string) {
 	projectPath := os.Getenv("gitlab_project_path")
 	mergeRequestIID := os.Getenv("gitlab_merge_request_iid")
 	jobName := os.Getenv("gitlab_job_name")
@@ -110,29 +107,23 @@ func fetchEnvVars() (string, string, string, string, interface{}, string, string
 	}
 
 	// Parse buildStatus as integer if possible
-	if buildStatusInt, err := strconv.Atoi(buildStatus); err == nil {
-		return projectPath, mergeRequestIID, jobName, gitlabToken, buildStatusInt, buildSHA, buildURL
+	if _, err := strconv.Atoi(buildStatus); err != nil {
+		log.Fatalf("Invalid bitrise_build_status: %s. Must be a valid integer as a string (e.g., '0' or '1').", buildStatus)
 	}
+
 	return projectPath, mergeRequestIID, jobName, gitlabToken, buildStatus, buildSHA, buildURL
 }
 
-// buildStatusToState maps the Bitrise build status to GitLab states.
-func buildStatusToState(buildStatus interface{}) string {
-	switch v := buildStatus.(type) {
-	case string:
-		if v == "0" {
-			return "success"
-		} else if v == "1" {
-			return "failed"
-		}
-	case int:
-		if v == 0 {
-			return "success"
-		} else if v == 1 {
-			return "failed"
-		}
+// buildStatusToState maps the Bitrise build status (as a string) to GitLab states.
+func buildStatusToState(buildStatus string) string {
+	switch buildStatus {
+	case "0":
+		return "success"
+	case "1":
+		return "failed"
+	default:
+		return "pending"
 	}
-	return "pending"
 }
 
 // fetchPipelines sends the GraphQL query to GitLab and returns the parsed response.
@@ -208,27 +199,19 @@ func debugLogJobs(response GraphQLResponse) {
 	}
 }
 
-// findJobID searches for a playable job with the specified name and returns its ID.
-func findJobID(response GraphQLResponse, jobName string) string {
+// findJobID searches for a playable job with the specified name and returns its ID and associated pipeline ID.
+func findJobID(response GraphQLResponse, jobName string) (string, string) {
 	for _, pipeline := range response.Data.Project.MergeRequest.Pipelines.Nodes {
 		for _, job := range pipeline.Jobs.Nodes {
 			if job.Name == jobName && job.CanPlayJob {
-				return job.ID
+				return job.ID, pipeline.IID
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
-// findPipelineID finds the pipeline ID from the fetched GraphQL response.
-func findPipelineID(response GraphQLResponse) string {
-	for _, pipeline := range response.Data.Project.MergeRequest.Pipelines.Nodes {
-		return pipeline.IID // Return the first pipeline ID
-	}
-	return ""
-}
-
-// publishBitriseStatus sends the Bitrise build status to GitLab.
+// publishBitriseStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
 func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToken, buildURL string) {
 	encodedProjectPath := url.PathEscape(projectPath)
 	statusUpdateEndpoint := fmt.Sprintf(statusUpdateURL, encodedProjectPath, commitSHA)
@@ -243,6 +226,9 @@ func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToke
 	formData.Set("target_url", buildURL)
 	formData.Set("description", "Bitrise build status update")
 	formData.Set("pipeline_id", pipelineID)
+
+	// Debug: Log request body
+	fmt.Printf("Request Body: %s\n", formData.Encode())
 
 	req, err := http.NewRequest("POST", statusUpdateEndpoint, bytes.NewBufferString(formData.Encode()))
 	if err != nil {
@@ -302,15 +288,16 @@ func triggerJob(jobID, gitlabToken string) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Printf("Response status: %d\n", resp.StatusCode)
-	fmt.Printf("Response body: %s\n", string(body))
-
 	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
 		log.Fatalf("GraphQL mutation failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var mutationResponse GraphQLMutationResponse
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Failed to read mutation response body: %v", err)
+	}
 	if err := json.Unmarshal(body, &mutationResponse); err != nil {
 		log.Fatalf("Failed to parse mutation response: %v", err)
 	}
