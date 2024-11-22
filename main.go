@@ -58,11 +58,11 @@ func main() {
 	projectPath, mergeRequestIID, jobName, gitlabToken := fetchEnvVars()
 
 	// Debug: Log the Bitrise build status
-	bitriseBuildStatus := os.Getenv("BITRISE_BUILD_STATUS") // Example: "0" for success, "1" for failed
+	bitriseBuildStatus := os.Getenv("bitrise_build_status") // Example: "0" for success, "1" for failed
 	fmt.Printf("Bitrise build status: %s\n", bitriseBuildStatus)
 
 	if bitriseBuildStatus == "" {
-		log.Fatal("BITRISE_BUILD_STATUS must be set.")
+		log.Fatal("bitrise_build_status must be set.")
 	}
 
 	// Fetch pipelines for the merge request
@@ -72,10 +72,10 @@ func main() {
 	debugLogJobs(response)
 
 	// Publish Bitrise build status to GitLab
-	bitriseBuildSHA := os.Getenv("BITRISE_GIT_COMMIT") // Commit SHA to associate with the status
+	bitriseBuildSHA := os.Getenv("bitrise_git_commit") // Commit SHA to associate with the status
 	pipelineID := findPipelineID(response)
 	if bitriseBuildSHA == "" || pipelineID == "" {
-		log.Fatal("BITRISE_GIT_COMMIT and pipelineID must be set.")
+		log.Fatal("bitrise_git_commit and pipeline_id must be set.")
 	}
 
 	// Publish the build status first
@@ -101,13 +101,13 @@ func main() {
 
 // fetchEnvVars retrieves and validates the required environment variables.
 func fetchEnvVars() (string, string, string, string) {
-	projectPath := os.Getenv("BITRISE_PROJECT_PATH")
-	mergeRequestIID := os.Getenv("BITRISE_MERGE_REQUEST_IID")
-	jobName := os.Getenv("GITLAB_JOB_NAME")
-	gitlabToken := os.Getenv("GITLAB_TOKEN")
+	projectPath := os.Getenv("gitlab_project_path")
+	mergeRequestIID := os.Getenv("gitlab_merge_request_iid")
+	jobName := os.Getenv("gitlab_job_name")
+	gitlabToken := os.Getenv("gitlab_token")
 
 	if projectPath == "" || mergeRequestIID == "" || jobName == "" || gitlabToken == "" {
-		log.Fatal("BITRISE_PROJECT_PATH, BITRISE_MERGE_REQUEST_IID, GITLAB_JOB_NAME, and GITLAB_TOKEN must be set.")
+		log.Fatal("gitlab_project_path, gitlab_merge_request_iid, gitlab_job_name, and gitlab_token must be set.")
 	}
 	return projectPath, mergeRequestIID, jobName, gitlabToken
 }
@@ -209,10 +209,9 @@ func findPipelineID(response GraphQLResponse) string {
 func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToken string) {
 	url := fmt.Sprintf(statusUpdateURL, projectPath, commitSHA)
 
-	// Build the request body
 	requestBody := map[string]string{
 		"state":       status,                         // Can be "success", "failed", "pending", etc.
-		"target_url":  os.Getenv("BITRISE_BUILD_URL"), // Optional: Link to the Bitrise build
+		"target_url":  os.Getenv("bitrise_build_url"), // Optional: Link to the Bitrise build
 		"description": "Bitrise build status update",
 		"pipeline_id": pipelineID,
 	}
@@ -221,7 +220,6 @@ func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToke
 		log.Fatalf("Failed to marshal status update body: %v", err)
 	}
 
-	// Create the HTTP request
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		log.Fatalf("Failed to create status update request: %v", err)
@@ -229,7 +227,6 @@ func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToke
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+gitlabToken)
 
-	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -237,7 +234,6 @@ func publishBitriseStatus(projectPath, pipelineID, commitSHA, status, gitlabToke
 	}
 	defer resp.Body.Close()
 
-	// Check the response
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := ioutil.ReadAll(resp.Body)
 		log.Fatalf("Failed to update status with status %d: %s", resp.StatusCode, string(body))
@@ -293,7 +289,6 @@ func triggerJob(jobID, gitlabToken string) {
 		log.Fatalf("Failed to parse mutation response: %v", err)
 	}
 
-	// Check for errors in the mutation response
 	if len(mutationResponse.Data.JobPlay.Errors) > 0 {
 		log.Fatalf("Failed to play job. Errors: %v", mutationResponse.Data.JobPlay.Errors)
 	}
