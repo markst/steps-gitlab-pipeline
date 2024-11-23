@@ -273,28 +273,31 @@ func triggerJob(projectID, jobID, gitlabToken string) {
 	apiURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s/jobs/%s/play", url.PathEscape(projectID), extractLastComponent(jobID))
 	fmt.Printf("Triggering job with id '%s' - url '%s'.\n", jobID, apiURL)
 
-	// Prepare the variables
-	variables := map[string]string{
-		"BITRISE_API_TOKEN":  os.Getenv("BITRISE_API_TOKEN"),
-		"BITRISE_APP_SLUG":   os.Getenv("BITRISE_APP_SLUG"),
-		"BITRISE_BUILD_SLUG": os.Getenv("BITRISE_BUILD_SLUG"),
+	// Prepare the job variables
+	jobVariables := []map[string]string{
+		{"key": "BITRISE_API_TOKEN", "value": os.Getenv("BITRISE_API_TOKEN")},
+		{"key": "BITRISE_APP_SLUG", "value": os.Getenv("BITRISE_APP_SLUG")},
+		{"key": "BITRISE_BUILD_SLUG", "value": os.Getenv("BITRISE_BUILD_SLUG")},
 	}
 
 	// Ensure all required variables are set
-	for key, value := range variables {
-		if value == "" {
-			log.Fatalf("Environment variable %s must be set.", key)
+	for _, v := range jobVariables {
+		if v["value"] == "" {
+			log.Fatalf("Environment variable %s must be set.", v["key"])
 		}
 	}
 
 	// Prepare the request body
 	requestBody := map[string]interface{}{
-		"variables": variables,
+		"job_variables_attributes": jobVariables,
 	}
 	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
 		log.Fatalf("Failed to marshal request body: %v", err)
 	}
+
+	// Debug: Output the request payload
+	fmt.Printf("DEBUG: Request payload: %s\n", string(jsonBody))
 
 	// Create the HTTP request
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonBody))
@@ -302,7 +305,7 @@ func triggerJob(projectID, jobID, gitlabToken string) {
 		log.Fatalf("Failed to create HTTP request for job trigger: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+gitlabToken)
+	req.Header.Set("PRIVATE-TOKEN", gitlabToken)
 
 	// Send the request
 	client := &http.Client{}
