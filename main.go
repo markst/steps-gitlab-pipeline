@@ -17,6 +17,27 @@ const (
 	statusUpdateURL = "https://gitlab.com/api/v4/projects/%s/statuses/%s" // GitLab API to update pipeline status
 )
 
+// GitLabStatus represents the possible states in GitLab
+type GitLabStatus string
+
+const (
+	Pending  GitLabStatus = "pending"
+	Running  GitLabStatus = "running"
+	Success  GitLabStatus = "success"
+	Failed   GitLabStatus = "failed"
+	Canceled GitLabStatus = "canceled"
+	Skipped  GitLabStatus = "skipped"
+)
+
+// IsValid checks if the status is valid
+func (s GitLabStatus) IsValid() bool {
+	switch s {
+	case Pending, Running, Success, Failed, Canceled, Skipped:
+		return true
+	}
+	return false
+}
+
 // GraphQLResponse structure to parse the pipeline query response
 type GraphQLResponse struct {
 	Data struct {
