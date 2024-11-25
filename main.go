@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	graphqlURL      = "https://gitlab.com/api/graphql"
-	statusUpdateURL = "https://gitlab.com/api/v4/projects/%s/statuses/%s" // GitLab API to update pipeline status
+	baseAPIURL   = "https://gitlab.com/api/v4/projects"
+	graphqlURL   = "https://gitlab.com/api/graphql"
+	statusesPath = "/%s/statuses/%s"  // Format: /:projectPath/statuses/:commitSHA
+	jobsPath     = "/%s/jobs/%s/play" // Format: /:projectPath/jobs/:jobID/play
 )
 
 // GitLabStatus represents the possible states in GitLab
