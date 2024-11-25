@@ -241,6 +241,7 @@ func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken,
 	formData.Set("target_url", buildURL)
 	formData.Set("description", "Bitrise build status update")
 	formData.Set("pipeline_id", pipelineID)
+	// formData.Set("coverage", x)
 
 	// Debug: Log request body
 	fmt.Printf("Request Body: %s\n", formData.Encode())
