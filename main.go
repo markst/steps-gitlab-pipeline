@@ -70,28 +70,14 @@ type GraphQLResponse struct {
 	} `json:"data"`
 }
 
-// GraphQLMutationResponse structure to parse the mutation response
-type GraphQLMutationResponse struct {
-	Data struct {
-		JobPlay struct {
-			Job struct {
-				ID     string `json:"id"`
-				Status string `json:"status"`
-			} `json:"job"`
-			Errors []string `json:"errors"`
-		} `json:"jobPlay"`
-	} `json:"data"`
+// Helper function to construct API endpoints
+func constructAPIEndpoint(path string, args ...interface{}) string {
+	return fmt.Sprintf(baseAPIURL+path, args...)
 }
 
 func main() {
 	// Fetch environment variables
 	projectPath, branchName, jobName, gitlabToken, buildStatus, buildSHA, buildURL := fetchEnvVars()
-
-	// Debug: Log all environment variables
-	fmt.Println("All Environment Variables:")
-	for _, env := range os.Environ() {
-		fmt.Println(env)
-	}
 
 	// Determine build status state
 	status := buildStatusToState(buildStatus)
@@ -109,7 +95,7 @@ func main() {
 	publishBuildStatus(projectPath, pipelineID, buildSHA, status, gitlabToken, buildURL)
 
 	// Trigger the job if build status is "success"
-	if status == "success" {
+	if status == Success {
 		fmt.Println("Build status indicates success. Proceeding to trigger the job.")
 		triggerJob(projectPath, jobID, gitlabToken)
 	} else {
@@ -135,15 +121,14 @@ func fetchEnvVars() (string, string, string, string, string, string, string) {
 }
 
 // buildStatusToState maps the Bitrise build status (as a string) to GitLab states.
-func buildStatusToState(buildStatus string) string {
-	// The state of the status. Can be one of the following: pending, running, success, failed, canceled, skipped
+func buildStatusToState(buildStatus string) GitLabStatus {
 	switch buildStatus {
 	case "0":
-		return "success"
+		return Success
 	case "1":
-		return "failed"
+		return Failed
 	default:
-		return "pending"
+		return Pending
 	}
 }
 
@@ -177,10 +162,9 @@ func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse
 		}
 	}`
 
-	// Prepare variables
 	variables := map[string]interface{}{
 		"projectPath": projectPath,
-		"branchName":  []string{branchName}, // Pass branch name as an array
+		"branchName":  []string{branchName},
 	}
 	requestBody := map[string]interface{}{
 		"query":     query,
@@ -213,9 +197,6 @@ func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse
 
 	var gqlResponse GraphQLResponse
 	body, err := ioutil.ReadAll(resp.Body)
-	responseBody := string(body)
-	fmt.Printf("Fetch pipelines", responseBody)
-
 	if err != nil {
 		log.Fatalf("Failed to read response body: %v", err)
 	}
@@ -232,9 +213,7 @@ func findJobAndPipeline(response GraphQLResponse, jobName string) (string, strin
 		for _, pipeline := range mergeRequest.Pipelines.Nodes {
 			for _, job := range pipeline.Jobs.Nodes {
 				if job.Name == jobName && job.CanPlayJob {
-					// Extract the numeric pipeline ID from the full ID
-					pipelineID := extractLastComponent(pipeline.ID)
-					return job.ID, pipelineID
+					return job.ID, extractLastComponent(pipeline.ID)
 				}
 			}
 		}
@@ -249,25 +228,19 @@ func extractLastComponent(fullID string) string {
 }
 
 // publishBuildStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
-func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken, buildURL string) {
-	encodedProjectPath := url.PathEscape(projectPath)
-	statusUpdateEndpoint := fmt.Sprintf(statusUpdateURL, encodedProjectPath, commitSHA)
+func publishBuildStatus(projectPath, pipelineID, commitSHA string, status GitLabStatus, gitlabToken, buildURL string) {
+	if !status.IsValid() {
+		log.Fatalf("Invalid status '%s' provided.", status)
+	}
 
-	// Debug logs
-	fmt.Printf("Publishing build status to URL: %s\n", statusUpdateEndpoint)
-	fmt.Printf("Commit SHA: %s\n", commitSHA)
+	statusUpdateEndpoint := constructAPIEndpoint(statusesPath, url.PathEscape(projectPath), commitSHA)
 
-	// Build request body
 	formData := url.Values{}
 	formData.Set("name", "Bitrise.io")
-	formData.Set("state", status)
+	formData.Set("state", string(status)) // Convert GitLabStatus to string
 	formData.Set("target_url", buildURL)
 	formData.Set("description", "Bitrise build status update")
 	formData.Set("pipeline_id", pipelineID)
-	// formData.Set("coverage", x)
-
-	// Debug: Log request body
-	fmt.Printf("Request Body: %s\n", formData.Encode())
 
 	req, err := http.NewRequest("POST", statusUpdateEndpoint, bytes.NewBufferString(formData.Encode()))
 	if err != nil {
@@ -283,23 +256,18 @@ func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken,
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Printf("Response status: %d\n", resp.StatusCode)
-
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		log.Fatalf("Failed to update status with status %d: %s", resp.StatusCode, string(body))
+		body, _ := ioutil.ReadAll(resp.Body)
+		log.Fatalf("Failed to update status. Status: %d, Response: %s", resp.StatusCode, string(body))
 	}
 
 	fmt.Printf("Successfully updated build status to '%s' for commit SHA '%s'.\n", status, commitSHA)
 }
 
-// triggerJob sends a GraphQL mutation to GitLab to play the specified job.
-func triggerJob(projectID, jobID, gitlabToken string) {
-	// Build the API URL for triggering the job
-	apiURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s/jobs/%s/play", url.PathEscape(projectID), extractLastComponent(jobID))
-	fmt.Printf("Triggering job with id '%s' - url '%s'.\n", jobID, apiURL)
+// triggerJob sends a request to play the specified job.
+func triggerJob(projectPath, jobID, gitlabToken string) {
+	apiURL := constructAPIEndpoint(jobsPath, url.PathEscape(projectPath), extractLastComponent(jobID))
 
-	// Prepare the job variables
 	jobVariables := []map[string]string{
 		{"key": "BITRISE_API_TOKEN", "value": os.Getenv("BITRISE_API_TOKEN")},
 		{"key": "BITRISE_APP_SLUG", "value": os.Getenv("BITRISE_APP_SLUG")},
@@ -313,7 +281,6 @@ func triggerJob(projectID, jobID, gitlabToken string) {
 		}
 	}
 
-	// Prepare the request body
 	requestBody := map[string]interface{}{
 		"job_variables_attributes": jobVariables,
 	}
@@ -322,10 +289,6 @@ func triggerJob(projectID, jobID, gitlabToken string) {
 		log.Fatalf("Failed to marshal request body: %v", err)
 	}
 
-	// Debug: Output the request payload
-	fmt.Printf("DEBUG: Request payload: %s\n", string(jsonBody))
-
-	// Create the HTTP request
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		log.Fatalf("Failed to create HTTP request for job trigger: %v", err)
@@ -333,31 +296,17 @@ func triggerJob(projectID, jobID, gitlabToken string) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("PRIVATE-TOKEN", gitlabToken)
 
-	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Failed to send the job trigger request: %v", err)
+		log.Fatalf("Failed to send job trigger request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Check the response status code
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := ioutil.ReadAll(resp.Body)
 		log.Fatalf("Failed to trigger job. Status: %d, Response: %s", resp.StatusCode, string(body))
 	}
-
-	// Parse the response
-	body, err := ioutil.ReadAll(resp.Body)
-	responseBody := string(body)
-	fmt.Printf("Triggered job response", responseBody)
-
-	if err != nil {
-		log.Fatalf("Failed to read response body: %v", err)
-	}
-
-	// Debug output for the response
-	fmt.Printf("Job trigger response: %s\n", string(body))
 
 	fmt.Println("Job successfully triggered.")
 }
