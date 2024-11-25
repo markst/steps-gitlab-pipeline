@@ -113,6 +113,7 @@ func fetchEnvVars() (string, string, string, string, string, string, string) {
 
 // buildStatusToState maps the Bitrise build status (as a string) to GitLab states.
 func buildStatusToState(buildStatus string) string {
+	// The state of the status. Can be one of the following: pending, running, success, failed, canceled, skipped
 	switch buildStatus {
 	case "0":
 		return "success"
@@ -235,6 +236,7 @@ func publishBuildStatus(projectPath, pipelineID, commitSHA, status, gitlabToken,
 
 	// Build request body
 	formData := url.Values{}
+	formData.Set("name", "Bitrise.io")
 	formData.Set("state", status)
 	formData.Set("target_url", buildURL)
 	formData.Set("description", "Bitrise build status update")
