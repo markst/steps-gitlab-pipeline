@@ -82,14 +82,18 @@ func main() {
 
 	// Find the job and its associated pipeline ID
 	jobID, pipelineID := findJobAndPipeline(response, jobName)
+
+	log.Fatalf("Build sha '%s'", buildSHA)
+	log.Fatalf("Build URL '%s'", buildURL)
+	log.Fatalf("Build status '%s'", status)
+	log.Fatalf("Build pipelins '%s'", pipelineID)
+
 	if jobID == "" || pipelineID == "" {
 		log.Fatalf("No playable job or pipeline found for job '%s' in branch '%s'.", jobName, branchName)
 	}
 
 	// Publish Bitrise build status to GitLab
 	// publishBuildStatus(projectPath, pipelineID, buildSHA, status, gitlabToken, buildURL)
-	log.Fatalf("Build sha '%s'", buildSHA)
-	log.Fatalf("Build URL '%s'", buildURL)
 
 	// Trigger the job if build status is "success"
 	if status == Success {

@@ -28,12 +28,6 @@ inputs:
       summary: "The full path of the GitLab project (e.g., 'group/project')."
       description: "Specify the full path of the GitLab project."
       is_required: true
-  - gitlab_merge_request_iid: ""
-    opts:
-      title: "Merge Request IID"
-      summary: "The IID of the GitLab merge request."
-      description: "Specify the IID of the merge request."
-      is_required: true
   - gitlab_branch_name: ""
     opts:
       title: "Branch name"
