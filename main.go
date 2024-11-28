@@ -87,7 +87,7 @@ func main() {
 	}
 
 	// Publish Bitrise build status to GitLab
-	publishBuildStatus(projectPath, pipelineID, buildSHA, status, gitlabToken, buildURL)
+	// publishBuildStatus(projectPath, pipelineID, buildSHA, status, gitlabToken, buildURL)
 
 	// Trigger the job if build status is "success"
 	if status == Success {
