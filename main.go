@@ -83,10 +83,11 @@ func main() {
 	// Find the job and its associated pipeline ID
 	jobID, pipelineID := findJobAndPipeline(response, jobName)
 
-	log.Fatalf("Build sha '%s'", buildSHA)
-	log.Fatalf("Build URL '%s'", buildURL)
-	log.Fatalf("Build status '%s'", status)
-	log.Fatalf("Build pipelins '%s'", pipelineID)
+	log.Printf("Build Job id '%s'", jobID)
+	log.Printf("Build SHA '%s'", buildSHA)
+	log.Printf("Build URL '%s'", buildURL)
+	log.Printf("Build Status '%s'", status)
+	log.Printf("Build Pipelins '%s'", pipelineID)
 
 	if jobID == "" || pipelineID == "" {
 		log.Fatalf("No playable job or pipeline found for job '%s' in branch '%s'.", jobName, branchName)
