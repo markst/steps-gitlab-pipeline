@@ -84,8 +84,8 @@ func main() {
 	jobID, pipelineID := findJobAndPipeline(response, jobName)
 
 	log.Printf("Build Job id '%s'", jobID)
-	log.Printf("Build SHA '%s'", map[bool]string{true: *buildSHA, false: "not provided"}[buildSHA != nil])
-	log.Printf("Build Branch '%s'", map[bool]string{true: *branchName, false: "not provided"}[buildSHA != nil])
+	log.Printf("Build SHA '%s'", safeString(buildSHA, "not provided"))
+	log.Printf("Build Branch '%s'", safeString(branchName, "not provided"))
 	log.Printf("Build URL '%s'", buildURL)
 	log.Printf("Build Status '%s'", status)
 	log.Printf("Build Pipelins '%s'", pipelineID)
@@ -267,6 +267,13 @@ func findJobAndPipeline(response GraphQLResponse, jobName string) (string, strin
 func extractLastComponent(fullID string) string {
 	parts := strings.Split(fullID, "/")
 	return parts[len(parts)-1]
+}
+
+func safeString(ptr *string, fallback string) string {
+	if ptr == nil {
+		return fallback
+	}
+	return *ptr
 }
 
 // publishBuildStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
