@@ -144,7 +144,7 @@ func buildStatusToState(buildStatus string) GitLabStatus {
 }
 
 // fetchPipelines sends the GraphQL query to GitLab and returns the parsed response.
-func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse {
+func fetchPipelines(projectPath string, branchName *string, gitlabToken string) GraphQLResponse {
 	query := `
 	query GetPipelineJobs($projectPath: ID!, $branchName: [String!]) {
 		project(fullPath: $projectPath) {
@@ -173,10 +173,15 @@ func fetchPipelines(projectPath, branchName, gitlabToken string) GraphQLResponse
 		}
 	}`
 
-	variables := map[string]interface{}{
+	// Construct the variables map
+	var variables = map[string]interface{}{
 		"projectPath": projectPath,
-		"branchName":  []string{branchName},
 	}
+	if branchName != nil && *branchName != "" {
+		variables["branchName"] = []string{*branchName}
+	}
+
+	// Build the request body
 	requestBody := map[string]interface{}{
 		"query":     query,
 		"variables": variables,
