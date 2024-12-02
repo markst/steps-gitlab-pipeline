@@ -106,7 +106,7 @@ func main() {
 }
 
 // fetchEnvVars retrieves and validates the required environment variables.
-func fetchEnvVars() (string, string, string, string, string, string, string) {
+func fetchEnvVars() (string, *string, string, string, string, string, string) {
 	projectPath := os.Getenv("gitlab_project_path")
 	branchName := os.Getenv("gitlab_branch_name")
 	jobName := os.Getenv("gitlab_job_name")
@@ -114,12 +114,21 @@ func fetchEnvVars() (string, string, string, string, string, string, string) {
 	buildStatus := os.Getenv("bitrise_build_status")
 	buildSHA := os.Getenv("bitrise_git_commit")
 	buildURL := os.Getenv("bitrise_build_url")
+	pr := os.Getenv("PR")
 
-	if projectPath == "" || branchName == "" || jobName == "" || gitlabToken == "" || buildSHA == "" || buildURL == "" {
+	if projectPath == "" || jobName == "" || gitlabToken == "" || buildSHA == "" || buildURL == "" {
 		log.Fatalf("One or more required environment variables are missing.")
 	}
 
-	return projectPath, branchName, jobName, gitlabToken, buildStatus, buildSHA, buildURL
+	// If PR is false, set branchName to nil
+	var branchNamePtr *string
+	if pr == "false" {
+		branchNamePtr = nil
+	} else {
+		branchNamePtr = &branchName
+	}
+
+	return projectPath, branchNamePtr, jobName, gitlabToken, buildStatus, buildSHA, buildURL
 }
 
 // buildStatusToState maps the Bitrise build status (as a string) to GitLab states.
