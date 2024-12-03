@@ -44,28 +44,22 @@ func (s GitLabStatus) IsValid() bool {
 type GraphQLResponse struct {
 	Data struct {
 		Project struct {
-			Name          string `json:"name"`
-			MergeRequests struct {
+			Name      string `json:"name"`
+			Pipelines struct {
 				Nodes []struct {
-					IID       string `json:"iid"`
-					ID        string `json:"id"`
-					Title     string `json:"title"`
-					Pipelines struct {
+					ID     string `json:"id"`  // Global pipeline ID
+					IID    string `json:"iid"` // Short pipeline ID
+					Status string `json:"status"`
+					Jobs   struct {
 						Nodes []struct {
-							ID   string `json:"id"`  // Global pipeline ID
-							IID  string `json:"iid"` // Short pipeline ID
-							Jobs struct {
-								Nodes []struct {
-									ID         string `json:"id"`         // Job global ID
-									Name       string `json:"name"`       // Job name
-									Status     string `json:"status"`     // Job status
-									CanPlayJob bool   `json:"canPlayJob"` // Can this job be played
-								} `json:"nodes"`
-							} `json:"jobs"`
+							ID         string `json:"id"`         // Job global ID
+							Name       string `json:"name"`       // Job name
+							Status     string `json:"status"`     // Job status
+							CanPlayJob bool   `json:"canPlayJob"` // Can this job be played
 						} `json:"nodes"`
-					} `json:"pipelines"`
+					} `json:"jobs"`
 				} `json:"nodes"`
-			} `json:"mergeRequests"`
+			} `json:"pipelines"`
 		} `json:"project"`
 	} `json:"data"`
 }
@@ -77,8 +71,8 @@ func main() {
 	// Determine build status state
 	status := buildStatusToState(buildStatus)
 
-	// Fetch pipelines for the merge request
-	response := fetchPipelines(projectPath, branchName, gitlabToken)
+	// Fetch pipelines for the commit
+	response := fetchPipelines(projectPath, *buildSHA, gitlabToken)
 
 	// Find the job and its associated pipeline ID
 	jobID, pipelineID := findJobAndPipeline(response, jobName)
@@ -88,7 +82,7 @@ func main() {
 	log.Printf("Build Branch '%s'", safeString(branchName, "not provided"))
 	log.Printf("Build URL '%s'", buildURL)
 	log.Printf("Build Status '%s'", status)
-	log.Printf("Build Pipelins '%s'", pipelineID)
+	log.Printf("Build Pipelines '%s'", pipelineID)
 
 	if jobID == "" || pipelineID == "" {
 		log.Fatalf("No playable job or pipeline found for job '%s'", jobName)
@@ -170,28 +164,22 @@ func buildStatusToState(buildStatus string) GitLabStatus {
 }
 
 // fetchPipelines sends the GraphQL query to GitLab and returns the parsed response.
-func fetchPipelines(projectPath string, branchName *string, gitlabToken string) GraphQLResponse {
+func fetchPipelines(projectPath string, sha string, gitlabToken string) GraphQLResponse {
 	query := `
-	query GetPipelineJobs($projectPath: ID!, $branchName: [String!]) {
+	query GetPipelinesForCommit($projectPath: ID!, $sha: String!) {
 		project(fullPath: $projectPath) {
 			name
-			mergeRequests(sourceBranches: $branchName, first: 1) {
+			pipelines(sha: $sha) {
 				nodes {
-					iid
 					id
-					title
-					pipelines {
+					iid
+					status
+					jobs {
 						nodes {
 							id
-							iid
-							jobs {
-								nodes {
-									id
-									name
-									status
-									canPlayJob
-								}
-							}
+							name
+							status
+							canPlayJob
 						}
 					}
 				}
@@ -249,14 +237,12 @@ func fetchPipelines(projectPath string, branchName *string, gitlabToken string) 
 	return gqlResponse
 }
 
-// findJobAndPipeline searches for a playable job with the specified name and returns its ID and associated pipeline ID.
+// findJobAndPipeline searches for a playable job and returns its ID and associated pipeline ID.
 func findJobAndPipeline(response GraphQLResponse, jobName string) (string, string) {
-	for _, mergeRequest := range response.Data.Project.MergeRequests.Nodes {
-		for _, pipeline := range mergeRequest.Pipelines.Nodes {
-			for _, job := range pipeline.Jobs.Nodes {
-				if job.Name == jobName && job.CanPlayJob {
-					return job.ID, extractLastComponent(pipeline.ID)
-				}
+	for _, pipeline := range response.Data.Project.Pipelines.Nodes {
+		for _, job := range pipeline.Jobs.Nodes {
+			if job.Name == jobName && job.CanPlayJob {
+				return job.ID, extractLastComponent(pipeline.ID)
 			}
 		}
 	}
