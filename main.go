@@ -241,7 +241,7 @@ func fetchPipelines(projectPath string, sha string, gitlabToken string) GraphQLR
 func findJobAndPipeline(response GraphQLResponse, jobName string) (string, string) {
 	for _, pipeline := range response.Data.Project.Pipelines.Nodes {
 		for _, job := range pipeline.Jobs.Nodes {
-			if job.Name == jobName && job.CanPlayJob {
+			if job.Name == jobName { // } && job.CanPlayJob {
 				return job.ID, extractLastComponent(pipeline.ID)
 			}
 		}
