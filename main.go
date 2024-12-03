@@ -72,7 +72,7 @@ func main() {
 	status := buildStatusToState(buildStatus)
 
 	// Fetch pipelines for the commit
-	response := fetchPipelines(projectPath, *buildSHA, gitlabToken)
+	response := fetchPipelines(projectPath, *buildSHA, branchName, gitlabToken)
 
 	// Find the job and its associated pipeline ID
 	jobID, pipelineID := findJobAndPipeline(response, jobName)
@@ -164,7 +164,7 @@ func buildStatusToState(buildStatus string) GitLabStatus {
 }
 
 // fetchPipelines sends the GraphQL query to GitLab and returns the parsed response.
-func fetchPipelines(projectPath string, sha string, gitlabToken string) GraphQLResponse {
+func fetchPipelines(projectPath string, sha string, branchName *string, gitlabToken string) GraphQLResponse {
 	query := `
 	query GetPipelinesForCommit($projectPath: ID!, $sha: String!) {
 		project(fullPath: $projectPath) {
@@ -190,6 +190,7 @@ func fetchPipelines(projectPath string, sha string, gitlabToken string) GraphQLR
 	// Construct the variables map
 	var variables = map[string]interface{}{
 		"projectPath": projectPath,
+		"sha":         sha,
 	}
 	if branchName != nil && *branchName != "" {
 		variables["branchName"] = []string{*branchName}
