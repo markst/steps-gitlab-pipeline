@@ -318,6 +318,11 @@ func triggerJob(projectPath, jobID, gitlabToken string) {
 		}
 	}
 
+	fmt.Println("Job Variables:")
+	for _, v := range jobVariables {
+		fmt.Printf("%s: %s\n", v["key"], v["value"])
+	}
+
 	requestBody := map[string]interface{}{
 		"job_variables_attributes": jobVariables,
 	}
