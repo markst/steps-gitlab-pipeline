@@ -72,14 +72,14 @@ func main() {
 	status := buildStatusToState(buildStatus)
 
 	// Fetch pipelines for the commit
-	response := fetchPipelines(projectPath, *buildSHA, branchName, gitlabToken)
+	response := fetchPipelines(projectPath, buildSHA, gitlabToken)
 
 	// Find the job and its associated pipeline ID
 	jobID, pipelineID := findJobAndPipeline(response, jobName)
 
 	log.Printf("Build Job id '%s'", jobID)
-	log.Printf("Build SHA '%s'", safeString(buildSHA, "not provided"))
-	log.Printf("Build Branch '%s'", safeString(branchName, "not provided"))
+	log.Printf("Build SHA '%s'", buildSHA)
+	log.Printf("Build Branch '%s'", branchName)
 	log.Printf("Build URL '%s'", buildURL)
 	log.Printf("Build Status '%s'", status)
 	log.Printf("Build Pipelines '%s'", pipelineID)
@@ -101,18 +101,16 @@ func main() {
 }
 
 // fetchEnvVars retrieves and validates the required environment variables.
-func fetchEnvVars() (string, *string, string, string, string, *string, string) {
-	// Fetch environment variables
+func fetchEnvVars() (string, string, string, string, string, string) {
 	projectPath := os.Getenv("gitlab_project_path")
 	branchName := os.Getenv("gitlab_branch_name")
 	jobName := os.Getenv("gitlab_job_name")
 	gitlabToken := os.Getenv("gitlab_token")
-	buildStatus := os.Getenv("bitrise_build_status")
-	buildSHA := os.Getenv("bitrise_git_commit")
-	buildURL := os.Getenv("bitrise_build_url")
-	pr := os.Getenv("PR")
+	buildStatus := os.Getenv("BITRISE_BUILD_STATUS")
+	buildSHA := os.Getenv("BITRISE_GIT_COMMIT")
+	cloneSHA := os.Getenv("GIT_CLONE_COMMIT_HASH")
+	buildURL := os.Getenv("BITRISE_BUILD_URL")
 
-	// Track missing variables
 	missingVars := []string{}
 	if projectPath == "" {
 		missingVars = append(missingVars, "gitlab_project_path")
@@ -132,24 +130,19 @@ func fetchEnvVars() (string, *string, string, string, string, *string, string) {
 		log.Fatalf("The following required environment variables are missing: %v", missingVars)
 	}
 
-	// Make buildSHA optional
-	var buildSHAPtr *string
-	if buildSHA != "" {
-		buildSHAPtr = &buildSHA
-	} else {
-		buildSHAPtr = nil
+	// Prefer BITRISE_GIT_COMMIT, fallback to GIT_CLONE_COMMIT_HASH
+	if buildSHA == "" && cloneSHA != "" {
+		log.Println("BITRISE_GIT_COMMIT is empty, falling back to GIT_CLONE_COMMIT_HASH.")
+		buildSHA = os.Getenv("BITRISE_GIT_COMMIT")
 	}
 
-	// Determine branchName based on PR environment variable
-	var branchNamePtr *string
-	if pr == "false" {
-		branchNamePtr = nil
-	} else {
-		branchNamePtr = &branchName
+	if buildSHA == "" {
+		missingVars = append(missingVars, "BITRISE_GIT_COMMIT or GIT_CLONE_COMMIT_HASH")
 	}
 
-	return projectPath, branchNamePtr, jobName, gitlabToken, buildStatus, buildSHAPtr, buildURL
+	return projectPath, branchName, jobName, gitlabToken, buildStatus, buildSHA, buildURL
 }
+
 
 // buildStatusToState maps the Bitrise build status (as a string) to GitLab states.
 func buildStatusToState(buildStatus string) GitLabStatus {
