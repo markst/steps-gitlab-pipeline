@@ -111,6 +111,13 @@ func fetchEnvVars() (string, string, string, string, string, string) {
 	cloneSHA := os.Getenv("GIT_CLONE_COMMIT_HASH")
 	buildURL := os.Getenv("BITRISE_BUILD_URL")
 
+	// Debug: dump all env vars
+	log.Println("---- All Environment Variables ----")
+	for _, env := range os.Environ() {
+		log.Println(env)
+	}
+	log.Println("------------------------------------")
+
 	missingVars := []string{}
 	if projectPath == "" {
 		missingVars = append(missingVars, "gitlab_project_path")
