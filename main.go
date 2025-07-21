@@ -15,11 +15,11 @@ import (
 const (
 	baseAPIURL   = "https://gitlab.com/api/v4/projects"
 	graphqlURL   = "https://gitlab.com/api/graphql"
-	statusesPath = "/%s/statuses/%s"
-	jobsPath     = "/%s/jobs/%s/play"
+	statusesPath = "/%s/statuses/%s"  // Format: /:projectPath/statuses/:commitSHA
+	jobsPath     = "/%s/jobs/%s/play" // Format: /:projectPath/jobs/:jobID/play
 )
 
-// GitLabStatus represents possible GitLab build states
+// GitLabStatus represents the possible states in GitLab
 type GitLabStatus string
 
 const (
@@ -39,7 +39,7 @@ func (s GitLabStatus) IsValid() bool {
 	return false
 }
 
-// GraphQLResponse structure for GitLab pipelines for commit
+// GraphQLResponse structure to parse the pipeline query response
 type GraphQLResponse struct {
 	Data struct {
 		Project struct {
@@ -214,7 +214,7 @@ func fetchPipelines(projectPath, sha, gitlabToken string) GraphQLResponse {
 	return gqlResponse
 }
 
-// findJobAndPipeline finds a playable job matching jobName and returns its job ID and pipeline ID
+// findJobAndPipeline searches for a playable job and returns its ID and associated pipeline ID.
 func findJobAndPipeline(response GraphQLResponse, jobName string) (string, string) {
 	for _, pipeline := range response.Data.Project.Pipelines.Nodes {
 		for _, job := range pipeline.Jobs.Nodes {
@@ -231,7 +231,44 @@ func extractLastComponent(id string) string {
 	return parts[len(parts)-1]
 }
 
-// triggerJob triggers the specified job with injected Bitrise build metadata
+// publishBuildStatus sends the Bitrise build status to GitLab for the specified commit SHA and pipeline ID.
+func publishBuildStatus(projectPath, pipelineID, commitSHA string, status GitLabStatus, gitlabToken, buildURL string) {
+	if !status.IsValid() {
+		log.Fatalf("Invalid status '%s' provided.", status)
+	}
+
+	statusUpdateEndpoint := fmt.Sprintf(baseAPIURL+statusesPath, url.PathEscape(projectPath), commitSHA)
+
+	formData := url.Values{}
+	formData.Set("name", "Bitrise.io")
+	formData.Set("state", string(status)) // Convert GitLabStatus to string
+	formData.Set("target_url", buildURL)
+	formData.Set("description", "Bitrise build status update")
+	formData.Set("pipeline_id", pipelineID)
+
+	req, err := http.NewRequest("POST", statusUpdateEndpoint, bytes.NewBufferString(formData.Encode()))
+	if err != nil {
+		log.Fatalf("Failed to create status update request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+gitlabToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("Failed to send status update request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		log.Fatalf("Failed to update status. Status: %d, Response: %s", resp.StatusCode, string(body))
+	}
+
+	fmt.Printf("Successfully updated build status to '%s' for commit SHA '%s'.\n", status, commitSHA)
+}
+
+// triggerJob sends a request to play the specified job.
 func triggerJob(projectPath, jobID, gitlabToken string) {
 	apiURL := fmt.Sprintf(baseAPIURL+jobsPath, url.PathEscape(projectPath), extractLastComponent(jobID))
 	log.Printf("Triggering job '%s' at '%s'", jobID, apiURL)
