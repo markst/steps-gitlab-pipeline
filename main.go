@@ -84,7 +84,6 @@ func main() {
 	}
 
 	if status == Success {
-		fmt.Println("Build succeeded. Triggering job...")
 		triggerJob(projectPath, jobID, gitlabToken)
 	} else {
 		fmt.Printf("Build status is '%s'. Skipping job trigger.\n", status)
@@ -96,17 +95,10 @@ func fetchEnvVars() (string, string, string, string, string, string) {
 	projectPath := os.Getenv("gitlab_project_path")
 	jobName := os.Getenv("gitlab_job_name")
 	gitlabToken := os.Getenv("gitlab_token")
-	buildStatus := os.Getenv("BITRISE_BUILD_STATUS")
 
+	buildStatus := os.Getenv("BITRISE_BUILD_STATUS")
 	buildSHA := os.Getenv("BITRISE_GIT_COMMIT")
 	buildURL := os.Getenv("BITRISE_BUILD_URL")
-
-	// Debug: dump all env vars
-	log.Println("---- All Environment Variables ----")
-	for _, env := range os.Environ() {
-		log.Println(env)
-	}
-	log.Println("------------------------------------")
 
 	// Fallback to GIT_CLONE_COMMIT_HASH if BITRISE_GIT_COMMIT is empty
 	if buildSHA == "" {
@@ -213,8 +205,6 @@ func fetchPipelines(projectPath, sha, gitlabToken string) GraphQLResponse {
 	}
 	if resp.StatusCode != http.StatusOK {
 		log.Fatalf("GraphQL query failed (%d): %s", resp.StatusCode, string(body))
-	} else {
-		log.Printf("GraphQL query response (%d): %s", resp.StatusCode, string(body))
 	}
 
 	var gqlResponse GraphQLResponse
@@ -285,5 +275,5 @@ func triggerJob(projectPath, jobID, gitlabToken string) {
 		log.Fatalf("Failed to trigger job (%d): %s", resp.StatusCode, string(body))
 	}
 
-	fmt.Println("Job successfully triggered.")
+	log.Printf("Job successfully triggered.")
 }
